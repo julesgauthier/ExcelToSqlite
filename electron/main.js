@@ -4,7 +4,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const ExcelJS = require('exceljs');
-const { getDb, getTables, getColumns } = require('./db/initDb');
+const { getDb, getTables, getColumns, getLastRows, addImportLog, getImportLogs } = require('./db/initDb');
 
 const isDev = !app.isPackaged;
 
@@ -108,8 +108,19 @@ ipcMain.handle('db:getColumns', async (event, tableName) => {
   return getColumns(tableName);
 });
 
+// ---- IPC DB: récupérer les dernières lignes d'une table ----
+ipcMain.handle('db:getLastRows', async (event, tableName, limit = 20) => {
+  try {
+    if (!tableName) return [];
+    return getLastRows(tableName, limit);
+  } catch (err) {
+    console.error('Erreur db:getLastRows', err);
+    return { error: true, message: err.message || 'Erreur inconnue' };
+  }
+});
+
 // ---- IPC EXCEL: OUVERTURE & PREVIEW (multi-feuilles, 5 lignes) ----
-ipcMain.handle('excel:open', async () => {
+ipcMain.handle('excel:open', async (event, payload = {}) => {
   const { canceled, filePaths } = await dialog.showOpenDialog({
     title: 'Choisir un fichier Excel',
     filters: [{ name: 'Fichiers Excel', extensions: ['xlsx'] }],
@@ -142,7 +153,8 @@ ipcMain.handle('excel:open', async () => {
   const activeSheetIndex = 0;
   const worksheet = workbook.worksheets[activeSheetIndex];
 
-  const { columns, sampleRows } = buildSheetPreview(worksheet, 5);
+  const previewLimit = payload.limit || 5;
+  const { columns, sampleRows } = buildSheetPreview(worksheet, previewLimit);
 
   return {
     canceled: false,
@@ -156,7 +168,7 @@ ipcMain.handle('excel:open', async () => {
 });
 
 // Preview d'une autre feuille du même fichier
-ipcMain.handle('excel:previewSheet', async (event, { filePath, sheetIndex }) => {
+ipcMain.handle('excel:previewSheet', async (event, { filePath, sheetIndex, limit = 5 }) => {
   if (!filePath || typeof sheetIndex !== 'number') {
     return {
       error: 'BAD_PARAMS',
@@ -176,7 +188,7 @@ ipcMain.handle('excel:previewSheet', async (event, { filePath, sheetIndex }) => 
     };
   }
 
-  const { columns, sampleRows } = buildSheetPreview(worksheet, 5);
+  const { columns, sampleRows } = buildSheetPreview(worksheet, limit);
 
   return {
     sheetIndex,
@@ -196,6 +208,8 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
       message: "Paramètres d'import invalides.",
     };
   }
+
+  const mode = payload.mode || 'stop';
 
   try {
     const db = getDb();
@@ -233,8 +247,11 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
     });
 
     let insertedCount = 0;
+    let failedCount = 0;
+    const errors = [];
 
-    const transaction = db.transaction(() => {
+    if (mode === 'continue') {
+      // insert ligne par ligne, capturer les erreurs et continuer
       worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
         if (rowNumber === 1) return;
 
@@ -252,23 +269,106 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
           return value ?? null;
         });
 
-        insertStmt.run(values);
-        insertedCount += 1;
+        try {
+          insertStmt.run(values);
+          insertedCount += 1;
+        } catch (rowErr) {
+          failedCount += 1;
+          errors.push({ row: rowNumber, error: rowErr.message });
+        }
       });
-    });
+    } else {
+      // mode 'stop' (par défaut) : transactionnel, rollback on error
+      const transaction = db.transaction(() => {
+        worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+          if (rowNumber === 1) return;
 
-    transaction();
+          const values = excelColumns.map((excelColName) => {
+            const colIndex = excelHeaderMap.get(excelColName);
+            if (!colIndex) return null;
 
-    return {
-      success: true,
+            const cell = row.getCell(colIndex);
+            let value = cell.value;
+
+            if (value && typeof value === 'object' && 'text' in value) {
+              value = value.text;
+            }
+
+            return value ?? null;
+          });
+
+          insertStmt.run(values);
+          insertedCount += 1;
+        });
+      });
+
+      transaction();
+    }
+
+    // Enregistrement dans import_logs (même si des erreurs se sont produites)
+    try {
+      const now = new Date().toISOString();
+      addImportLog({
+        imported_at: now,
+        table_name: tableName,
+        file_path: filePath,
+        sheet_name: worksheet.name,
+        rows_inserted: insertedCount,
+        mode: mode,
+        has_errors: failedCount > 0 ? 1 : 0,
+      });
+    } catch (logErr) {
+      console.error("Impossible d'enregistrer le log d'import :", logErr);
+    }
+
+    // Construire la réponse
+    const result = {
+      success: insertedCount > 0,
       inserted: insertedCount,
-      message: `Import réussi : ${insertedCount} ligne(s) insérée(s).`,
+      failed: failedCount,
+      errors: errors,
+      message: `Import terminé : ${insertedCount} insérée(s), ${failedCount} échouée(s).`,
     };
+
+    // Si en mode stop et qu'il y a eu une erreur, considérer comme échec
+    if (mode !== 'continue' && failedCount > 0) {
+      result.success = false;
+      result.message = `Import échoué après erreur: ${errors[0] && errors[0].error}`;
+    }
+
+    return result;
   } catch (error) {
     console.error("Erreur lors de l'import Excel → SQLite :", error);
+
+    // Tenter d'enregistrer le log même en cas d'erreur critique
+    try {
+      const now = new Date().toISOString();
+      addImportLog({
+        imported_at: now,
+        table_name: tableName || null,
+        file_path: filePath || null,
+        sheet_name: null,
+        rows_inserted: 0,
+        mode: payload.mode || null,
+        has_errors: 1,
+      });
+    } catch (logErr) {
+      console.error("Impossible d'enregistrer le log d'import après erreur :", logErr);
+    }
+
     return {
       success: false,
       message: "Erreur lors de l'import : " + (error.message || 'inconnue'),
     };
+  }
+});
+
+// IPC pour récupérer l'historique des imports
+ipcMain.handle('db:getImportLogs', async (event, limit = 50) => {
+  try {
+    return getImportLogs(limit);
+  } catch (err) {
+    console.error('Erreur db:getImportLogs', err);
+    return { error: true, message: err.message || 'Erreur inconnue' };
   }
 });

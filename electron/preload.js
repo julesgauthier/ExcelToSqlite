@@ -11,10 +11,13 @@ const api = {
     getTables: () => ipcRenderer.invoke("db:getTables"),
     getTableColumns: (tableName) =>
       ipcRenderer.invoke("db:getColumns", tableName),
+    getLastRows: (tableName, limit) =>
+      ipcRenderer.invoke("db:getLastRows", tableName, limit),
+    getImportLogs: (limit) => ipcRenderer.invoke("db:getImportLogs", limit),
   },
 
   excel: {
-    open: () => ipcRenderer.invoke("excel:open"),
+    open: (payload) => ipcRenderer.invoke("excel:open", payload),
     previewSheet: (payload) =>
       ipcRenderer.invoke("excel:previewSheet", payload),
   },

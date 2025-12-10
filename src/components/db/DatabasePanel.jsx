@@ -7,6 +7,7 @@ export default function DatabasePanel({
   dbError,
   onLoadTables,
   onSelectTable,
+  lastRows = [],
 }) {
   return (
     <SectionCard title="Base SQLite">
@@ -73,6 +74,37 @@ export default function DatabasePanel({
               </tbody>
             </table>
           )}
+
+          <div style={{ marginTop: '1rem' }}>
+            <h3>Dernières lignes {selectedTable ? `de ${selectedTable}` : ''}</h3>
+
+            {lastRows.length === 0 && (
+              <p style={{ fontStyle: 'italic' }}>Aucune ligne à afficher.</p>
+            )}
+
+            {lastRows.length > 0 && (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      {Object.keys(lastRows[0]).map((k) => (
+                        <th key={k}>{k}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lastRows.map((r, idx) => (
+                      <tr key={idx}>
+                        {Object.keys(lastRows[0]).map((k) => (
+                          <td key={k}>{String(r[k] ?? '')}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </SectionCard>

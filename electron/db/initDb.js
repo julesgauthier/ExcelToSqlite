@@ -52,6 +52,22 @@ function ensureBaseSchema(db) {
   `;
 
   db.exec(createUsersTable);
+  
+  // Table pour l'historique des imports
+  const createImportLogs = `
+    CREATE TABLE IF NOT EXISTS import_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      imported_at TEXT NOT NULL,
+      table_name TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      sheet_name TEXT,
+      rows_inserted INTEGER,
+      mode TEXT,
+      has_errors INTEGER
+    );
+  `;
+
+  db.exec(createImportLogs);
 }
 
 /**
@@ -88,8 +104,74 @@ function getColumns(tableName) {
   return stmt.all();
 }
 
+/**
+ * Retourne les dernières lignes d'une table.
+ * @param {string} tableName
+ * @param {number} limit
+ * @returns {Array<Object>}
+ */
+function getLastRows(tableName, limit = 20) {
+  if (!tableName) return [];
+
+  const db = getDb();
+
+  const safeName = String(tableName).replace(/[^a-zA-Z0-9_]/g, "");
+  if (safeName !== tableName) {
+    throw new Error("Nom de table invalide");
+  }
+
+  const lim = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Number(limit) : 20;
+
+  // On sélectionne toutes les colonnes et on retourne les dernières lignes
+  // basées sur rowid (comportement générique pour SQLite).
+  const sql = `SELECT * FROM ${safeName} ORDER BY rowid DESC LIMIT ?`;
+  const stmt = db.prepare(sql);
+  const rows = stmt.all(lim);
+
+  return rows;
+}
+
+/**
+ * Ajoute une entrée dans import_logs
+ * @param {object} log { imported_at, table_name, file_path, sheet_name, rows_inserted, mode, has_errors }
+ */
+function addImportLog(log) {
+  const db = getDb();
+
+  const stmt = db.prepare(`
+    INSERT INTO import_logs (imported_at, table_name, file_path, sheet_name, rows_inserted, mode, has_errors)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const res = stmt.run(
+    log.imported_at,
+    log.table_name,
+    log.file_path,
+    log.sheet_name || null,
+    Number.isFinite(Number(log.rows_inserted)) ? Number(log.rows_inserted) : 0,
+    log.mode || null,
+    log.has_errors ? 1 : 0
+  );
+
+  return res.lastInsertRowid;
+}
+
+/**
+ * Récupère les derniers imports
+ * @param {number} limit
+ */
+function getImportLogs(limit = 50) {
+  const db = getDb();
+  const lim = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Number(limit) : 50;
+  const stmt = db.prepare(`SELECT * FROM import_logs ORDER BY id DESC LIMIT ?`);
+  return stmt.all(lim);
+}
+
 module.exports = {
   getDb,
   getTables,
   getColumns,
+  getLastRows,
+  addImportLog,
+  getImportLogs,
 };
