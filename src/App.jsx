@@ -3,6 +3,9 @@ import AppLayout from "./components/layout/AppLayout.jsx";
 import DatabasePanel from "./components/db/DatabasePanel.jsx";
 import ExcelPanel from "./components/excel/ExcelPanel.jsx";
 import MappingPanel from "./components/mapping/MappingPanel.jsx";
+import ConfigPanel from "./components/common/ConfigPanel.jsx";
+import ConnectionPanel from "./components/db/ConnectionPanel.jsx";
+import ImportHistoryPanel from "./components/db/ImportHistoryPanel.jsx";
 
 function App() {
   const hasApi = typeof window !== "undefined" && window.api;
@@ -12,6 +15,7 @@ function App() {
   const [selectedTable, setSelectedTable] = useState(null);
   const [columns, setColumns] = useState([]);
   const [dbError, setDbError] = useState("");
+  const [lastRows, setLastRows] = useState([]);
 
   // État Excel
   const [excelInfo, setExcelInfo] = useState(null);
@@ -20,6 +24,18 @@ function App() {
   // État mapping Excel → DB
   const [mapping, setMapping] = useState({});
   const [importResult, setImportResult] = useState("");
+  const [settings, setSettings] = useState(() => {
+    try {
+      const raw = localStorage.getItem('app_settings');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return { importMode: 'stop', ...parsed };
+      }
+    } catch {
+      // ignore
+    }
+    return { importMode: 'stop' };
+  });
 
   // ---- HANDLERS SQLITE ----
 
@@ -48,6 +64,7 @@ function App() {
     setSelectedTable(tableName);
     setColumns([]);
     setImportResult("");
+    setLastRows([]);
 
     if (
       !hasApi ||
@@ -61,6 +78,15 @@ function App() {
     try {
       const result = await window.api.db.getTableColumns(tableName);
       setColumns(result || []);
+      // Récupère les dernières lignes (20 par défaut)
+      if (window.api.db && typeof window.api.db.getLastRows === "function") {
+        try {
+          const rows = await window.api.db.getLastRows(tableName, 20);
+          if (Array.isArray(rows)) setLastRows(rows);
+        } catch (err) {
+          console.error('Erreur lors de la récupération des dernières lignes', err);
+        }
+      }
     } catch (e) {
       console.error(e);
       setDbError("Erreur lors du chargement des colonnes.");
@@ -123,6 +149,7 @@ function App() {
       const result = await window.api.excel.previewSheet({
         filePath: excelInfo.filePath,
         sheetIndex: newIndex,
+        page: 0,
       });
 
       if (result && !result.error) {
@@ -132,6 +159,9 @@ function App() {
           sheetName: result.sheetName,
           columns: result.columns,
           sampleRows: result.sampleRows,
+          totalRows: result.totalRows,
+          page: result.page || 0,
+          limit: result.limit,
         }));
       } else if (result && result.error) {
         setExcelError(result.message || "Erreur lors du changement de feuille.");
@@ -143,6 +173,33 @@ function App() {
   };
 
   // ---- HANDLERS MAPPING & IMPORT ----
+
+  const handlePreviewPage = async (newPage) => {
+    if (!excelInfo || !excelInfo.filePath) return;
+    if (!window.api || !window.api.excel || typeof window.api.excel.previewSheet !== 'function') return;
+
+    try {
+      const result = await window.api.excel.previewSheet({
+        filePath: excelInfo.filePath,
+        sheetIndex: excelInfo.activeSheetIndex ?? 0,
+        page: newPage,
+      });
+
+      if (result && !result.error) {
+        setExcelInfo((prev) => ({
+          ...prev,
+          sheetName: result.sheetName || prev.sheetName,
+          columns: result.columns,
+          sampleRows: result.sampleRows,
+          totalRows: result.totalRows,
+          page: result.page || 0,
+          limit: result.limit,
+        }));
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   const handleChangeMapping = (dbColumn, excelColumnName) => {
     setMapping((prev) => ({
@@ -185,6 +242,7 @@ function App() {
       setImportResult("Aucun mapping défini, rien à importer.");
       return;
     }
+    
 
     try {
       const result = await window.api.import.excelToTable({
@@ -192,6 +250,7 @@ function App() {
         filePath: excelInfo.filePath,
         mapping: mappingArray,
         sheetIndex: excelInfo.activeSheetIndex ?? 0,
+        mode: settings.importMode,
       });
 
       if (!result) {
@@ -199,16 +258,48 @@ function App() {
         return;
       }
 
-      if (result.success) {
-        setImportResult(result.message || "Import réussi.");
+      // Message détaillé
+      if (typeof result.inserted === 'number' || typeof result.failed === 'number') {
+        const inserted = result.inserted || 0;
+        const failed = result.failed || 0;
+        let msg = `Import terminé : ${inserted} insérée(s)`;
+        if (failed > 0) msg += `, ${failed} échouée(s)`;
+        if (result.errors && result.errors.length > 0) {
+          msg += ` — 1ère erreur: ${result.errors[0].error}`;
+        }
+        setImportResult(msg);
       } else {
-        setImportResult(result.message || "Import échoué.");
+        setImportResult(result.message || (result.success ? "Import réussi." : "Import échoué."));
       }
+
+      // Always notify other panels to refresh (history)
+      try {
+        window.dispatchEvent(new Event('import:completed'));
+      } catch {
+        // ignore
+      }
+
+      // Refresh the selected table's last rows/columns
+      if (selectedTable) {
+        try {
+          await handleSelectTable(selectedTable);
+        } catch {
+          // ignore
+        }
+      }
+      return result;
     } catch (e) {
       console.error(e);
       setImportResult("Erreur lors de l'appel à l'import.");
+      return null;
     }
   };
+
+  const handleSettingsChange = (newSettings) => {
+    setSettings((prev) => ({ ...prev, ...newSettings }));
+  };
+
+  // Preview limit setting removed — preview uses server default.
 
   return (
     <AppLayout>
@@ -218,20 +309,26 @@ function App() {
       </p>
 
       <div className="panels">
-        <DatabasePanel
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 320 }}>
+          <ConnectionPanel onConnected={handleLoadTables} />
+          <DatabasePanel
           tables={tables}
           selectedTable={selectedTable}
           columns={columns}
           dbError={dbError}
           onLoadTables={handleLoadTables}
           onSelectTable={handleSelectTable}
-        />
+          lastRows={lastRows}
+          />
+
+        </div>
 
         <ExcelPanel
           excelInfo={excelInfo}
           excelError={excelError}
           onOpenExcel={handleOpenExcel}
           onChangeSheet={handleChangeSheet}
+          onChangePage={handlePreviewPage}
         />
       </div>
 
@@ -243,8 +340,14 @@ function App() {
           mapping={mapping}
           importResult={importResult}
           onChangeMapping={handleChangeMapping}
+          onSetMapping={setMapping}
           onImport={handleImport}
         />
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <ConfigPanel onChangeSettings={handleSettingsChange} />
+          <ImportHistoryPanel />
+        </div>
       </div>
     </AppLayout>
   );

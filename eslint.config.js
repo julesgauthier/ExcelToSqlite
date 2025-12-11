@@ -26,4 +26,20 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  // Node/electron specific files (main, preload, db scripts)
+  {
+    files: ['electron/**', '__tests__/**'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.node,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'script',
+      },
+    },
+    rules: {
+      // allow require in node files
+      'no-undef': 'off',
+    },
+  },
 ])

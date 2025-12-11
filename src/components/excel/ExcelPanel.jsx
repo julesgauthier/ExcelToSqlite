@@ -5,6 +5,7 @@ export default function ExcelPanel({
   excelError,
   onOpenExcel,
   onChangeSheet,
+  onChangePage,
 }) {
   return (
     <SectionCard title="Fichier Excel">
@@ -59,7 +60,10 @@ export default function ExcelPanel({
             </ul>
           )}
 
-          <h3 style={{ marginTop: "1rem" }}>Exemple de lignes (max 5)</h3>
+          <h3 style={{ marginTop: "1rem" }}>
+            Exemple de lignes (page {((excelInfo.page ?? 0) + 1)}
+            {excelInfo.totalRows ? ` — ${excelInfo.totalRows} lignes au total` : ''})
+          </h3>
           {excelInfo.sampleRows.length === 0 && (
             <p>Aucune ligne de données trouvée.</p>
           )}
@@ -94,6 +98,31 @@ export default function ExcelPanel({
               </table>
             </div>
           )}
+
+            {/* Pagination controls */}
+            {typeof excelInfo.totalRows === 'number' && (
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => onChangePage && onChangePage(Math.max(0, (excelInfo.page || 0) - 1))}
+                  disabled={(excelInfo.page || 0) <= 0}
+                >
+                  Précédent
+                </button>
+
+                <div style={{ fontSize: '0.9rem' }}>
+                  Page { (excelInfo.page || 0) + 1 } / { Math.max(1, Math.ceil((excelInfo.totalRows || 0) / (excelInfo.limit || 5))) }
+                </div>
+
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => onChangePage && onChangePage((excelInfo.page || 0) + 1)}
+                  disabled={(excelInfo.page || 0) >= Math.max(0, Math.ceil((excelInfo.totalRows || 0) / (excelInfo.limit || 5)) - 1)}
+                >
+                  Suivant
+                </button>
+              </div>
+            )}
         </div>
       )}
     </SectionCard>

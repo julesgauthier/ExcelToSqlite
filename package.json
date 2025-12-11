@@ -9,7 +9,8 @@
     "electron": "electron .",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "jest --passWithNoTests",
+    "test:unit": "jest --passWithNoTests"
   },
   "dependencies": {
     "better-sqlite3": "^12.5.0",
@@ -18,6 +19,7 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "jest": "^29.7.0",
     "@eslint/js": "^9.39.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
@@ -31,5 +33,9 @@
     "globals": "^16.5.0",
     "vite": "^7.2.4",
     "wait-on": "^9.0.3"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "verbose": true
   }
 }
