@@ -38,13 +38,9 @@ jobs:
       - name: Build
         run: npm run build
 
-  build-executables:
+  build-windows-executable:
     needs: build-and-test
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
 
     steps:
       - name: Checkout du code
@@ -60,49 +56,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/electron
-            ~/.cache/electron-builder
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
           key: ${{ runner.os }}-electron-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-electron-
 
-      - name: Installation des dépendances (avec retry)
-        uses: nick-fields/retry-action@v3
-        with:
-          timeout_minutes: 10
-          max_attempts: 3
-          retry_wait_seconds: 30
-          command: npm install
+      - name: Installation des dépendances
+        run: npm install
 
       - name: Build executable pour Windows
-        if: matrix.os == 'windows-latest'
         run: npm run dist:win
 
-      - name: Build executable pour macOS
-        if: matrix.os == 'macos-latest'
-        run: npm run dist:mac
-
-      - name: Build executable pour Linux
-        if: matrix.os == 'ubuntu-latest'
-        run: npm run dist:linux
-
-      - name: Upload artifacts Windows
-        if: matrix.os == 'windows-latest'
+      - name: Upload executable Windows
         uses: actions/upload-artifact@v4
         with:
           name: excel2sqlite-windows
           path: dist_electron/*.exe
-
-      - name: Upload artifacts macOS
-        if: matrix.os == 'macos-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: excel2sqlite-macos
-          path: dist_electron/*.dmg
-
-      - name: Upload artifacts Linux
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: excel2sqlite-linux
-          path: dist_electron/*.AppImage
