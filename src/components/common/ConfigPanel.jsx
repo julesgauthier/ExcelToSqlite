@@ -1,22 +1,25 @@
 import SectionCard from "../common/SectionCard.jsx";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 export default function ConfigPanel({ onChangeSettings }) {
-  const [importMode, setImportMode] = useState("stop");
-  const [previewLimit, setPreviewLimit] = useState(5);
-
-  useEffect(() => {
+  const initialSettings = (() => {
     try {
       const raw = localStorage.getItem("app_settings");
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed.importMode) setImportMode(parsed.importMode);
-        if (parsed.previewLimit) setPreviewLimit(Number(parsed.previewLimit));
+        return {
+          importMode: parsed.importMode || "stop",
+          previewLimit: parsed.previewLimit ? Number(parsed.previewLimit) : 5,
+        };
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
-  }, []);
+    return { importMode: "stop", previewLimit: 5 };
+  })();
+
+  const [importMode, setImportMode] = useState(initialSettings.importMode);
+  const [previewLimit, setPreviewLimit] = useState(initialSettings.previewLimit);
 
   const persist = (newSettings) => {
     const merged = { importMode, previewLimit, ...newSettings };

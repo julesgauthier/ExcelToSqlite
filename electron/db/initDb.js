@@ -43,7 +43,7 @@ function closeDb() {
   if (dbInstance) {
     try {
       dbInstance.close();
-    } catch (e) {
+    } catch {
       // ignore
     }
     dbInstance = null;
@@ -224,7 +224,7 @@ function getImportLogs(limit = 50) {
         ...r,
         error_details: r.error_details ? JSON.parse(r.error_details) : null,
       };
-    } catch (e) {
+    } catch {
       return { ...r, error_details: null };
     }
   });

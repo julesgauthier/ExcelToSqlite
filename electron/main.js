@@ -1,5 +1,4 @@
 /* eslint-env node */
-/* global __dirname, process */
 
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');

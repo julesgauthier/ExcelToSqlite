@@ -11,11 +11,15 @@ const { getDb, getTables, addImportLogWithErrors, getImportLogs, getLastRows, cl
 afterAll(() => {
   try {
     closeDb();
-  } catch (e) {}
+  } catch {
+    /* ignore cleanup errors during tests */
+  }
 
   try {
     if (fs.existsSync(TEST_DB)) fs.unlinkSync(TEST_DB);
-  } catch (e) {}
+  } catch {
+    /* ignore cleanup errors during tests */
+  }
 });
 
 test('DB file is created and base tables exist', () => {
