@@ -4,7 +4,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const ExcelJS = require('exceljs');
-const { getDb, getTables, getColumns, getLastRows, addImportLog, getImportLogs } = require('./db/initDb');
+const { getDb, getTables, getColumns, getLastRows, addImportLogWithErrors, getImportLogs } = require('./db/initDb');
 
 const isDev = !app.isPackaged;
 
@@ -308,7 +308,7 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
     // Enregistrement dans import_logs (même si des erreurs se sont produites)
     try {
       const now = new Date().toISOString();
-      addImportLog({
+      addImportLogWithErrors({
         imported_at: now,
         table_name: tableName,
         file_path: filePath,
@@ -316,6 +316,7 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
         rows_inserted: insertedCount,
         mode: mode,
         has_errors: failedCount > 0 ? 1 : 0,
+        error_details: errors.length > 0 ? errors : null,
       });
     } catch (logErr) {
       console.error("Impossible d'enregistrer le log d'import :", logErr);
@@ -343,7 +344,7 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
     // Tenter d'enregistrer le log même en cas d'erreur critique
     try {
       const now = new Date().toISOString();
-      addImportLog({
+      addImportLogWithErrors({
         imported_at: now,
         table_name: tableName || null,
         file_path: filePath || null,
@@ -351,6 +352,7 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
         rows_inserted: 0,
         mode: payload.mode || null,
         has_errors: 1,
+        error_details: [{ error: error.message }],
       });
     } catch (logErr) {
       console.error("Impossible d'enregistrer le log d'import après erreur :", logErr);

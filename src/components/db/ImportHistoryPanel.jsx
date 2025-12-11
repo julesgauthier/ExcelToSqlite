@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 export default function ImportHistoryPanel() {
   const [logs, setLogs] = useState([]);
   const [error, setError] = useState("");
+  const [expandedId, setExpandedId] = useState(null);
 
   const fetchLogs = async () => {
     setError("");
@@ -61,18 +62,54 @@ export default function ImportHistoryPanel() {
                 <th>Lignes</th>
                 <th>Mode</th>
                 <th>Has errors</th>
+                <th>Détails</th>
               </tr>
             </thead>
             <tbody>
               {logs.map((l) => (
-                <tr key={l.id}>
-                  <td>{new Date(l.imported_at).toLocaleString()}</td>
-                  <td>{l.table_name}</td>
-                  <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.file_path}</td>
-                  <td>{l.rows_inserted}</td>
-                  <td>{l.mode || '-'}</td>
-                  <td>{l.has_errors ? '✅' : '—'}</td>
-                </tr>
+                <>
+                  <tr key={l.id}>
+                    <td>{new Date(l.imported_at).toLocaleString()}</td>
+                    <td>{l.table_name}</td>
+                    <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.file_path}</td>
+                    <td>{l.rows_inserted}</td>
+                    <td>{l.mode || '-'}</td>
+                    <td>{l.has_errors ? '✅' : '—'}</td>
+                    <td>
+                      {l.error_details ? (
+                        <button
+                          className="btn btn-link"
+                          onClick={() => setExpandedId(expandedId === l.id ? null : l.id)}
+                        >
+                          Détails
+                        </button>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+                  </tr>
+
+                  {expandedId === l.id && l.error_details && (
+                    <tr key={`${l.id}-details`}>
+                      <td colSpan={7} style={{ background: '#f9fafb' }}>
+                        <div style={{ padding: '0.5rem', fontSize: '0.9rem' }}>
+                          <strong>Détails des erreurs :</strong>
+                          <ul style={{ marginTop: '0.5rem' }}>
+                            {Array.isArray(l.error_details) && l.error_details.length > 0 ? (
+                              l.error_details.map((err, i) => (
+                                <li key={i}>
+                                  {err.row ? `Ligne ${err.row} : ` : ''}{err.error || JSON.stringify(err)}
+                                </li>
+                              ))
+                            ) : (
+                              <li>Aucune information détaillée.</li>
+                            )}
+                          </ul>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
             </tbody>
           </table>

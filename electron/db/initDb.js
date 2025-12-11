@@ -4,9 +4,9 @@ const path = require("path");
 const Database = require("better-sqlite3");
 
 // Emplacement du fichier SQLite.
-// Pour un vrai projet Electron, on pourrait utiliser app.getPath("userData")
-// et passer le chemin depuis main.js. Pour ce module, on reste simple.
-const DB_FILE = path.join(__dirname, "excel2sqlite.db");
+// Pour les tests on autorise l'override via la variable d'environnement TEST_SQLITE_DB_FILE
+// (utile pour CI). Sinon on utilise le fichier par défaut dans ce dossier.
+const DB_FILE = process.env.TEST_SQLITE_DB_FILE || path.join(__dirname, "excel2sqlite.db");
 
 let dbInstance = null;
 
@@ -37,6 +37,20 @@ function getDb() {
 }
 
 /**
+ * Ferme la connexion DB (utile pour les tests afin de supprimer le fichier).
+ */
+function closeDb() {
+  if (dbInstance) {
+    try {
+      dbInstance.close();
+    } catch (e) {
+      // ignore
+    }
+    dbInstance = null;
+  }
+}
+
+/**
  * Crée les tables de base si elles n'existent pas.
  * Ici on garde un exemple minimal avec "users", pour la démo.
  * Tu pourrais ensuite factoriser ça dans un vrai "schema.js".
@@ -64,10 +78,24 @@ function ensureBaseSchema(db) {
       rows_inserted INTEGER,
       mode TEXT,
       has_errors INTEGER
+      -- optional JSON column for error details
+      , error_details TEXT
     );
   `;
 
   db.exec(createImportLogs);
+
+  // If the DB already existed before adding error_details, ensure the column exists.
+  try {
+    const cols = db.prepare("PRAGMA table_info(import_logs);").all();
+    const hasErrorDetails = cols.some((c) => c.name === 'error_details');
+    if (!hasErrorDetails) {
+      db.exec("ALTER TABLE import_logs ADD COLUMN error_details TEXT;");
+    }
+  } catch (err) {
+    // ignore - defensive: ALTER may fail on some edge cases, but it's non-fatal
+    console.error('ensure import_logs schema:', err && err.message);
+  }
 }
 
 /**
@@ -156,6 +184,30 @@ function addImportLog(log) {
   return res.lastInsertRowid;
 }
 
+function addImportLogWithErrors(log) {
+  const db = getDb();
+
+  const stmt = db.prepare(`
+    INSERT INTO import_logs (imported_at, table_name, file_path, sheet_name, rows_inserted, mode, has_errors, error_details)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const errorDetails = log.error_details ? JSON.stringify(log.error_details) : null;
+
+  const res = stmt.run(
+    log.imported_at,
+    log.table_name,
+    log.file_path,
+    log.sheet_name || null,
+    Number.isFinite(Number(log.rows_inserted)) ? Number(log.rows_inserted) : 0,
+    log.mode || null,
+    log.has_errors ? 1 : 0,
+    errorDetails
+  );
+
+  return res.lastInsertRowid;
+}
+
 /**
  * Récupère les derniers imports
  * @param {number} limit
@@ -164,7 +216,18 @@ function getImportLogs(limit = 50) {
   const db = getDb();
   const lim = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Number(limit) : 50;
   const stmt = db.prepare(`SELECT * FROM import_logs ORDER BY id DESC LIMIT ?`);
-  return stmt.all(lim);
+  const rows = stmt.all(lim);
+  // parse json details if present
+  return rows.map((r) => {
+    try {
+      return {
+        ...r,
+        error_details: r.error_details ? JSON.parse(r.error_details) : null,
+      };
+    } catch (e) {
+      return { ...r, error_details: null };
+    }
+  });
 }
 
 module.exports = {
@@ -173,5 +236,7 @@ module.exports = {
   getColumns,
   getLastRows,
   addImportLog,
+  addImportLogWithErrors,
   getImportLogs,
+  closeDb,
 };
