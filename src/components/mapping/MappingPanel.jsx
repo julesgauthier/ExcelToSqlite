@@ -12,14 +12,18 @@ function colorForKey(key) {
 }
 
 export default function MappingPanel({
+  tables = [],
   selectedTable,
-  columns,
+  columns = [],
   excelInfo,
-  mapping,
+  mapping = {},
   importResult,
   onChangeMapping,
   onSetMapping,
   onImport,
+  onSelectTable,
+  settings = { mode: 'stop' },
+  onChangeSettings,
 }) {
   const canShowMapping =
     selectedTable && excelInfo && excelInfo.columns && columns.length > 0;
@@ -239,6 +243,62 @@ export default function MappingPanel({
 
   return (
     <SectionCard title="Mapping Excel → SQLite">
+      {/* Sélecteur de table cible */}
+      <div style={{ marginBottom: '1rem' }}>
+        <label htmlFor="target-table" style={{ display: 'block', fontWeight: 600, marginBottom: '0.5rem' }}>
+          Table cible
+        </label>
+        <select
+          id="target-table"
+          value={selectedTable || ''}
+          onChange={(e) => onSelectTable && onSelectTable(e.target.value)}
+          style={{ 
+            padding: '0.5rem', 
+            borderRadius: '4px', 
+            border: '1px solid #ddd',
+            fontSize: '0.9rem',
+            width: '100%',
+            maxWidth: '400px'
+          }}
+        >
+          <option value="">-- Sélectionner une table --</option>
+          {tables && tables.map((t) => (
+            <option key={t.name} value={t.name}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Paramètres d'import */}
+      {selectedTable && (
+        <div style={{ marginBottom: '1rem', padding: '0.75rem', background: '#f9f9f9', borderRadius: '6px' }}>
+          <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Comportement en cas d&apos;erreur</div>
+          <label style={{ display: 'block', marginBottom: '0.25rem', cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="import-mode"
+              value="stop"
+              checked={settings?.mode === 'stop'}
+              onChange={() => onChangeSettings && onChangeSettings({ mode: 'stop' })}
+              style={{ marginRight: '0.5rem' }}
+            />
+            S&apos;arrêter à la première erreur (transaction atomique)
+          </label>
+          <label style={{ display: 'block', cursor: 'pointer' }}>
+            <input
+              type="radio"
+              name="import-mode"
+              value="continue"
+              checked={settings?.mode === 'continue'}
+              onChange={() => onChangeSettings && onChangeSettings({ mode: 'continue' })}
+              style={{ marginRight: '0.5rem' }}
+            />
+            Continuer malgré les erreurs (enregistre ligne par ligne)
+          </label>
+        </div>
+      )}
+
       {!selectedTable && <p>Sélectionne d&apos;abord une table SQLite.</p>}
       {(!excelInfo || !excelInfo.columns) && (
         <p>Charge un fichier Excel pour définir un mapping.</p>
@@ -246,9 +306,6 @@ export default function MappingPanel({
 
       {canShowMapping && (
         <>
-          <p style={{ fontSize: "0.9rem" }}>
-            Table cible : <strong>{selectedTable}</strong>
-          </p>
 
           <div style={{ display: 'flex', gap: 20, marginTop: 12 }}>
             <div style={{ flex: 1 }}>

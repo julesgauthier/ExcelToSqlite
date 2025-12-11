@@ -1,8 +1,9 @@
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  width: 100%;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .logo {
@@ -39,4 +40,29 @@
 
 .read-the-docs {
   color: #888;
+}
+
+.page-content {
+  padding: 2rem;
+  animation: fadeIn 0.3s ease-in;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.page-title {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: #1e3a8a;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AppLayout from "./components/layout/AppLayout.jsx";
+import Sidebar from "./components/layout/Sidebar.jsx";
 import DatabasePanel from "./components/db/DatabasePanel.jsx";
 import ExcelPanel from "./components/excel/ExcelPanel.jsx";
 import MappingPanel from "./components/mapping/MappingPanel.jsx";
-import ConfigPanel from "./components/common/ConfigPanel.jsx";
 import ConnectionPanel from "./components/db/ConnectionPanel.jsx";
 import ImportHistoryPanel from "./components/db/ImportHistoryPanel.jsx";
 
 function App() {
   const hasApi = typeof window !== "undefined" && window.api;
+
+  // État de navigation par onglets
+  const [activeTab, setActiveTab] = useState('config');
 
   // État SQLite
   const [tables, setTables] = useState([]);
@@ -29,13 +32,22 @@ function App() {
       const raw = localStorage.getItem('app_settings');
       if (raw) {
         const parsed = JSON.parse(raw);
-        return { importMode: 'stop', ...parsed };
+        return { mode: 'stop', ...parsed };
       }
     } catch {
       // ignore
     }
-    return { importMode: 'stop' };
+    return { mode: 'stop' };
   });
+
+  // Sauvegarder les settings dans localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('app_settings', JSON.stringify(settings));
+    } catch {
+      // ignore
+    }
+  }, [settings]);
 
   // ---- HANDLERS SQLITE ----
 
@@ -220,7 +232,7 @@ function App() {
         filePath: excelInfo.filePath,
         mapping: mappingArray,
         sheetIndex: excelInfo.activeSheetIndex ?? 0,
-        mode: settings.importMode,
+        mode: settings.mode,
       });
 
       if (!result) {
@@ -271,49 +283,78 @@ function App() {
 
   // Preview limit setting removed — preview uses server default.
 
+  const tabs = [
+    { id: 'config', label: 'Configuration', icon: '⚙️' },
+    { id: 'import', label: 'Import & Mapping', icon: '📊' },
+    { id: 'history', label: 'Historique', icon: '📜' },
+  ];
+
   return (
-    <AppLayout>
-      <div className="panels">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 320 }}>
-          <ConnectionPanel onConnected={handleLoadTables} />
-          <DatabasePanel
-          tables={tables}
-          selectedTable={selectedTable}
-          columns={columns}
-          dbError={dbError}
-          onLoadTables={handleLoadTables}
-          onSelectTable={handleSelectTable}
-          lastRows={lastRows}
-          />
+    <>
+      <Sidebar 
+        tabs={tabs} 
+        activeTab={activeTab} 
+        onTabChange={setActiveTab} 
+      />
+      
+      <AppLayout>
+        {/* Section 1: Configuration BDD (visualisation seulement) */}
+        {activeTab === 'config' && (
+          <div className="page-content">
+            <h2 className="page-title">Configuration de la base de données</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <ConnectionPanel onConnected={handleLoadTables} />
+              <DatabasePanel
+                tables={tables}
+                selectedTable={selectedTable}
+                columns={columns}
+                dbError={dbError}
+                onLoadTables={handleLoadTables}
+                onSelectTable={handleSelectTable}
+                lastRows={lastRows}
+              />
+            </div>
+          </div>
+        )}
 
-        </div>
+        {/* Section 2: Import Excel + Mapping (avec sélecteur de table) */}
+        {activeTab === 'import' && (
+          <div className="page-content">
+            <h2 className="page-title">Import & Mapping</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <ExcelPanel
+                excelInfo={excelInfo}
+                excelError={excelError}
+                onOpenExcel={handleOpenExcel}
+                onChangeSheet={handleChangeSheet}
+              />
+              <MappingPanel
+                tables={tables}
+                selectedTable={selectedTable}
+                columns={columns}
+                excelInfo={excelInfo}
+                mapping={mapping}
+                importResult={importResult}
+                onChangeMapping={handleChangeMapping}
+                onSetMapping={setMapping}
+                onImport={handleImport}
+                onSelectTable={handleSelectTable}
+                settings={settings}
+                onChangeSettings={handleSettingsChange}
+              />
+            </div>
+          </div>
+        )}
 
-        <ExcelPanel
-          excelInfo={excelInfo}
-          excelError={excelError}
-          onOpenExcel={handleOpenExcel}
-          onChangeSheet={handleChangeSheet}
-        />
-      </div>
-
-      <div className="panels-bottom">
-        <MappingPanel
-          selectedTable={selectedTable}
-          columns={columns}
-          excelInfo={excelInfo}
-          mapping={mapping}
-          importResult={importResult}
-          onChangeMapping={handleChangeMapping}
-          onSetMapping={setMapping}
-          onImport={handleImport}
-        />
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <ConfigPanel onChangeSettings={handleSettingsChange} />
-          <ImportHistoryPanel />
-        </div>
-      </div>
-    </AppLayout>
+        {/* Section 3: Historique */}
+        {activeTab === 'history' && (
+          <div className="page-content">
+            <h2 className="page-title">Historique des imports</h2>
+            <ImportHistoryPanel />
+          </div>
+        )}
+      </AppLayout>
+    </>
   );
 }
 
