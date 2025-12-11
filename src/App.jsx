@@ -242,6 +242,7 @@ function App() {
       setImportResult("Aucun mapping défini, rien à importer.");
       return;
     }
+    
 
     try {
       const result = await window.api.import.excelToTable({
