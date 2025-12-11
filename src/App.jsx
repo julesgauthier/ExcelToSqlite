@@ -339,6 +339,7 @@ function App() {
           mapping={mapping}
           importResult={importResult}
           onChangeMapping={handleChangeMapping}
+          onSetMapping={setMapping}
           onImport={handleImport}
         />
 
