@@ -5,7 +5,6 @@ export default function ExcelPanel({
   excelError,
   onOpenExcel,
   onChangeSheet,
-  onChangePage,
 }) {
   return (
     <SectionCard title="Fichier Excel">
