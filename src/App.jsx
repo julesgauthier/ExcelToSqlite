@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import AppLayout from "./components/layout/AppLayout.jsx";
 import DatabasePanel from "./components/db/DatabasePanel.jsx";
 import ExcelPanel from "./components/excel/ExcelPanel.jsx";
 import MappingPanel from "./components/mapping/MappingPanel.jsx";
 import ConfigPanel from "./components/common/ConfigPanel.jsx";
+import ConnectionPanel from "./components/db/ConnectionPanel.jsx";
 import ImportHistoryPanel from "./components/db/ImportHistoryPanel.jsx";
 
 function App() {
@@ -28,12 +29,12 @@ function App() {
       const raw = localStorage.getItem('app_settings');
       if (raw) {
         const parsed = JSON.parse(raw);
-        return { importMode: 'stop', previewLimit: 5, ...parsed };
+        return { importMode: 'stop', ...parsed };
       }
     } catch {
       // ignore
     }
-    return { importMode: 'stop', previewLimit: 5 };
+    return { importMode: 'stop' };
   });
 
   // ---- HANDLERS SQLITE ----
@@ -110,7 +111,7 @@ function App() {
     }
 
     try {
-      const result = await window.api.excel.open({ limit: settings.previewLimit });
+      const result = await window.api.excel.open();
 
       if (!result || result.canceled) {
         return;
@@ -148,7 +149,7 @@ function App() {
       const result = await window.api.excel.previewSheet({
         filePath: excelInfo.filePath,
         sheetIndex: newIndex,
-        limit: settings.previewLimit,
+        page: 0,
       });
 
       if (result && !result.error) {
@@ -158,6 +159,9 @@ function App() {
           sheetName: result.sheetName,
           columns: result.columns,
           sampleRows: result.sampleRows,
+          totalRows: result.totalRows,
+          page: result.page || 0,
+          limit: result.limit,
         }));
       } else if (result && result.error) {
         setExcelError(result.message || "Erreur lors du changement de feuille.");
@@ -169,6 +173,33 @@ function App() {
   };
 
   // ---- HANDLERS MAPPING & IMPORT ----
+
+  const handlePreviewPage = async (newPage) => {
+    if (!excelInfo || !excelInfo.filePath) return;
+    if (!window.api || !window.api.excel || typeof window.api.excel.previewSheet !== 'function') return;
+
+    try {
+      const result = await window.api.excel.previewSheet({
+        filePath: excelInfo.filePath,
+        sheetIndex: excelInfo.activeSheetIndex ?? 0,
+        page: newPage,
+      });
+
+      if (result && !result.error) {
+        setExcelInfo((prev) => ({
+          ...prev,
+          sheetName: result.sheetName || prev.sheetName,
+          columns: result.columns,
+          sampleRows: result.sampleRows,
+          totalRows: result.totalRows,
+          page: result.page || 0,
+          limit: result.limit,
+        }));
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   const handleChangeMapping = (dbColumn, excelColumnName) => {
     setMapping((prev) => ({
@@ -255,9 +286,11 @@ function App() {
           // ignore
         }
       }
+      return result;
     } catch (e) {
       console.error(e);
       setImportResult("Erreur lors de l'appel à l'import.");
+      return null;
     }
   };
 
@@ -265,35 +298,7 @@ function App() {
     setSettings((prev) => ({ ...prev, ...newSettings }));
   };
 
-  // Appliquer dynamiquement la nouvelle limite de preview lorsque l'utilisateur la change
-  useEffect(() => {
-    const applyPreviewLimit = async () => {
-      if (!excelInfo || !excelInfo.filePath) return;
-      if (!window.api || !window.api.excel || typeof window.api.excel.previewSheet !== 'function') return;
-
-      try {
-        const result = await window.api.excel.previewSheet({
-          filePath: excelInfo.filePath,
-          sheetIndex: excelInfo.activeSheetIndex ?? 0,
-          limit: settings.previewLimit,
-        });
-
-        if (result && !result.error) {
-          setExcelInfo((prev) => ({
-            ...prev,
-            activeSheetIndex: result.sheetIndex ?? prev.activeSheetIndex,
-            sheetName: result.sheetName || prev.sheetName,
-            columns: result.columns,
-            sampleRows: result.sampleRows,
-          }));
-        }
-      } catch {
-        // ignore errors from preview
-      }
-    };
-
-    applyPreviewLimit();
-  }, [settings.previewLimit, excelInfo]);
+  // Preview limit setting removed — preview uses server default.
 
   return (
     <AppLayout>
@@ -303,7 +308,9 @@ function App() {
       </p>
 
       <div className="panels">
-        <DatabasePanel
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 320 }}>
+          <ConnectionPanel onConnected={handleLoadTables} />
+          <DatabasePanel
           tables={tables}
           selectedTable={selectedTable}
           columns={columns}
@@ -311,13 +318,16 @@ function App() {
           onLoadTables={handleLoadTables}
           onSelectTable={handleSelectTable}
           lastRows={lastRows}
-        />
+          />
+
+        </div>
 
         <ExcelPanel
           excelInfo={excelInfo}
           excelError={excelError}
           onOpenExcel={handleOpenExcel}
           onChangeSheet={handleChangeSheet}
+          onChangePage={handlePreviewPage}
         />
       </div>
 

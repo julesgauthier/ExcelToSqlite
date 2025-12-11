@@ -14,6 +14,9 @@ const api = {
     getLastRows: (tableName, limit) =>
       ipcRenderer.invoke("db:getLastRows", tableName, limit),
     getImportLogs: (limit) => ipcRenderer.invoke("db:getImportLogs", limit),
+    chooseFile: () => ipcRenderer.invoke('db:chooseSqliteFile'),
+    setDbFile: (filePath) => ipcRenderer.invoke('db:setDbFile', filePath),
+    getDbFile: () => ipcRenderer.invoke('db:getDbFile'),
   },
 
   excel: {
@@ -23,8 +26,13 @@ const api = {
   },
 
   import: {
-    excelToTable: (payload) =>
-      ipcRenderer.invoke("db:importExcelToTable", payload),
+    excelToTable: (payload) => ipcRenderer.invoke("db:importExcelToTable", payload),
+    cancel: (importId) => ipcRenderer.invoke('import:cancel', importId),
+    onProgress: (cb) => {
+      const handler = (event, data) => cb && cb(data);
+      ipcRenderer.on('import:progress', handler);
+      return () => ipcRenderer.removeListener('import:progress', handler);
+    },
   },
 };
 

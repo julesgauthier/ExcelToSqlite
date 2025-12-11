@@ -6,7 +6,7 @@ const Database = require("better-sqlite3");
 // Emplacement du fichier SQLite.
 // Pour les tests on autorise l'override via la variable d'environnement TEST_SQLITE_DB_FILE
 // (utile pour CI). Sinon on utilise le fichier par défaut dans ce dossier.
-const DB_FILE = process.env.TEST_SQLITE_DB_FILE || path.join(__dirname, "excel2sqlite.db");
+let dbFilePath = process.env.TEST_SQLITE_DB_FILE || path.join(__dirname, "excel2sqlite.db");
 
 let dbInstance = null;
 
@@ -14,7 +14,7 @@ let dbInstance = null;
  * Crée une nouvelle connexion SQLite configurée.
  */
 function createDb() {
-  const db = new Database(DB_FILE);
+  const db = new Database(dbFilePath);
 
   // Quelques pragmas raisonnables pour une petite app desktop
   db.pragma("journal_mode = WAL");
@@ -23,6 +23,33 @@ function createDb() {
   ensureBaseSchema(db);
 
   return db;
+}
+
+/**
+ * Change the active DB file path at runtime and close the existing connection.
+ * Pass `null` or empty to reset to the default file in the project folder.
+ */
+function setDbFile(newPath) {
+  // normalize: if falsy, reset to default path
+  if (!newPath) {
+    dbFilePath = process.env.TEST_SQLITE_DB_FILE || path.join(__dirname, "excel2sqlite.db");
+  } else {
+    dbFilePath = String(newPath);
+  }
+
+  // close existing instance so next getDb() reopens with the new path
+  try {
+    if (dbInstance) {
+      dbInstance.close();
+    }
+  } catch {
+    // ignore
+  }
+  dbInstance = null;
+}
+
+function getDbFile() {
+  return dbFilePath;
 }
 
 /**
@@ -239,4 +266,6 @@ module.exports = {
   addImportLogWithErrors,
   getImportLogs,
   closeDb,
+  setDbFile,
+  getDbFile,
 };
