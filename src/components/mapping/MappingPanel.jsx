@@ -28,14 +28,14 @@ export default function MappingPanel({
   const [progress, setProgress] = useState(null);
   const importIdRef = useRef(null);
   const [suggestions, setSuggestions] = useState({});
-  const [threshold, setThreshold] = useState(0.7);
+  const [threshold] = useState(0.7);
   const containerRef = useRef(null);
   const excelRefs = useRef({});
   const dbRefs = useRef({});
   const [connectors, setConnectors] = useState([]);
   // autoApply flag removed: auto-apply is now automatic when columns are available
   const [hovered, setHovered] = useState(null);
-  const [legendPosition, setLegendPosition] = useState('bottom'); // 'top' | 'bottom'
+  const [legendPosition] = useState('bottom'); // 'top' | 'bottom'
 
   useEffect(() => {
     if (!window || !window.api || !window.api.import || !window.api.import.onProgress) return;
@@ -61,6 +61,9 @@ export default function MappingPanel({
       }
     };
   }, []);
+
+  // canonicalize name: lowercase alnum only
+  const canonical = (s) => (s || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
 
   // compute suggestions whenever excel columns or target columns change
   useEffect(() => {
@@ -110,10 +113,11 @@ export default function MappingPanel({
         if (typeof onSetMapping === 'function') onSetMapping(newMapping);
         else Object.keys(newMapping).forEach((k) => onChangeMapping(k, newMapping[k]));
       }
-    } catch (e) {
+    } catch {
       // ignore auto-apply errors
     }
-  }, [excelInfo, columns]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [excelInfo, columns, threshold]);
 
   
 
@@ -149,7 +153,7 @@ export default function MappingPanel({
       });
 
       setConnectors(newConnectors);
-    } catch (e) {
+    } catch {
       // ignore layout errors
     }
   };
@@ -178,7 +182,7 @@ export default function MappingPanel({
         ro = new ResizeObserver(onResize);
         ro.observe(containerRef.current);
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
 
@@ -191,10 +195,8 @@ export default function MappingPanel({
         // ignore
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapping, excelInfo, columns]);
-
-  // canonicalize name: lowercase alnum only
-  const canonical = (s) => (s || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
 
   // Manual trigger to apply auto-mapping on demand
   const handleAutoMap = () => {
@@ -279,7 +281,7 @@ export default function MappingPanel({
                     draggable
                     onDragStart={(e) => {
                       e.dataTransfer.setData('text/plain', ec.name);
-                      try { e.dataTransfer.effectAllowed = 'copy'; } catch {}
+                      try { e.dataTransfer.effectAllowed = 'copy'; } catch { /* ignore */ }
                     }}
                     onMouseEnter={() => setHovered({ type: 'excel', key: ec.name })}
                     onMouseLeave={() => setHovered(null)}
@@ -317,7 +319,7 @@ export default function MappingPanel({
                   <div
                     key={col.cid}
                     ref={(el) => { if (el) dbRefs.current[col.name] = el; }}
-                    onDragOver={(e) => { e.preventDefault(); try { e.dataTransfer.dropEffect = 'copy'; } catch {} }}
+                    onDragOver={(e) => { e.preventDefault(); try { e.dataTransfer.dropEffect = 'copy'; } catch { /* ignore */ } }}
                     onDrop={(e) => {
                       e.preventDefault();
                       const excelName = e.dataTransfer.getData('text/plain');
