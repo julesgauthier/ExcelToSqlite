@@ -254,13 +254,45 @@ function addImportLogWithErrors(log) {
  * Récupère les derniers imports
  * @param {number} limit
  */
-function getImportLogs(limit = 50) {
+function getImportLogs(options = {}) {
   const db = getDb();
-  const lim = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Number(limit) : 50;
-  const stmt = db.prepare(`SELECT * FROM import_logs ORDER BY id DESC LIMIT ?`);
-  const rows = stmt.all(lim);
-  // parse json details if present
-  return rows.map((r) => {
+  const {
+    limit = 20,
+    offset = 0,
+    searchText = '',
+  } = options;
+
+  const lim = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Number(limit) : 20;
+  const off = Number.isFinite(Number(offset)) && Number(offset) >= 0 ? Number(offset) : 0;
+
+  // Build WHERE clause
+  const whereClauses = [];
+  const params = [];
+
+  if (searchText && searchText.trim()) {
+    whereClauses.push('(table_name LIKE ? OR file_path LIKE ?)');
+    const searchPattern = `%${searchText.trim()}%`;
+    params.push(searchPattern, searchPattern);
+  }
+
+  const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+  // Count total matching records
+  const countStmt = db.prepare(`SELECT COUNT(*) as total FROM import_logs ${whereClause}`);
+  const countResult = countStmt.get(...params);
+  const total = countResult ? countResult.total : 0;
+
+  // Get paginated results
+  const dataStmt = db.prepare(`
+    SELECT * FROM import_logs
+    ${whereClause}
+    ORDER BY id DESC
+    LIMIT ? OFFSET ?
+  `);
+  const rows = dataStmt.all(...params, lim, off);
+
+  // Parse JSON details
+  const data = rows.map((r) => {
     try {
       return {
         ...r,
@@ -270,6 +302,13 @@ function getImportLogs(limit = 50) {
       return { ...r, error_details: null };
     }
   });
+
+  return {
+    data,
+    total,
+    limit: lim,
+    offset: off,
+  };
 }
 
 module.exports = {

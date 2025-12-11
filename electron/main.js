@@ -437,12 +437,12 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
 });
 
 // IPC pour récupérer l'historique des imports
-ipcMain.handle('db:getImportLogs', async (event, limit = 50) => {
+ipcMain.handle('db:getImportLogs', async (event, options = {}) => {
   try {
-    return getImportLogs(limit);
+    return getImportLogs(options);
   } catch (err) {
     console.error('Erreur db:getImportLogs', err);
-    return { error: true, message: err.message || 'Erreur inconnue' };
+    return { data: [], total: 0, limit: 20, offset: 0, error: true, message: err.message || 'Erreur inconnue' };
   }
 });
 

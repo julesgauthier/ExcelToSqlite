@@ -13,7 +13,7 @@ const api = {
       ipcRenderer.invoke("db:getColumns", tableName),
     getLastRows: (tableName, limit) =>
       ipcRenderer.invoke("db:getLastRows", tableName, limit),
-    getImportLogs: (limit) => ipcRenderer.invoke("db:getImportLogs", limit),
+    getImportLogs: (options) => ipcRenderer.invoke("db:getImportLogs", options),
     chooseFile: () => ipcRenderer.invoke('db:chooseSqliteFile'),
     setDbFile: (filePath) => ipcRenderer.invoke('db:setDbFile', filePath),
     getDbFile: () => ipcRenderer.invoke('db:getDbFile'),
