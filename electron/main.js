@@ -5,6 +5,7 @@ const path = require('path');
 const ExcelJS = require('exceljs');
 const { getDb, getTables, getColumns, getLastRows, addImportLogWithErrors, getImportLogs } = require('./db/initDb');
 const { setDbFile, getDbFile } = require('./db/initDb');
+const { evaluateExpression, validateExpression, getFunctionDocs } = require('./utils/transformEngine');
 
 const isDev = !app.isPackaged;
 
@@ -227,6 +228,7 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
 
     const dbColumns = mapping.map((m) => m.dbColumn);
     const excelColumns = mapping.map((m) => m.excelColumn);
+    const transformations = mapping.map((m) => m.transformation || null);
 
     const placeholders = dbColumns.map(() => '?').join(', ');
     const sql = `INSERT INTO ${tableName} (${dbColumns.join(', ')}) VALUES (${placeholders})`;
@@ -268,9 +270,13 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
       for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber += 1) {
         const row = worksheet.getRow(rowNumber);
 
-        const values = excelColumns.map((excelColName) => {
+        const rowData = {};
+        excelColumns.forEach((excelColName) => {
           const colIndex = excelHeaderMap.get(excelColName);
-          if (!colIndex) return null;
+          if (!colIndex) {
+            rowData[excelColName] = null;
+            return;
+          }
 
           const cell = row.getCell(colIndex);
           let value = cell.value;
@@ -279,8 +285,33 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
             value = value.text;
           }
 
-          return value ?? null;
+          rowData[excelColName] = value ?? null;
         });
+
+        // Apply transformations
+        const values = mapping.map((m, idx) => {
+          let value = rowData[m.excelColumn];
+          
+          // If transformation exists, apply it
+          if (transformations[idx]) {
+            try {
+              value = evaluateExpression(transformations[idx], rowData);
+            } catch (transformErr) {
+              // If transformation fails, log error and use null or original value
+              errors.push({ 
+                row: rowNumber, 
+                error: `Transformation error for ${m.dbColumn}: ${transformErr.message}` 
+              });
+              failedCount += 1;
+              return null; // Skip this row
+            }
+          }
+          
+          return value;
+        });
+
+        // Skip if transformation failed
+        if (values.includes(null) && values.every(v => v === null)) continue;
 
         // Check for cancellation request
         const token = importTokens.get(importId);
@@ -334,9 +365,13 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
         worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
           if (rowNumber === 1) return;
 
-          const values = excelColumns.map((excelColName) => {
+          const rowData = {};
+          excelColumns.forEach((excelColName) => {
             const colIndex = excelHeaderMap.get(excelColName);
-            if (!colIndex) return null;
+            if (!colIndex) {
+              rowData[excelColName] = null;
+              return;
+            }
 
             const cell = row.getCell(colIndex);
             let value = cell.value;
@@ -345,7 +380,19 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
               value = value.text;
             }
 
-            return value ?? null;
+            rowData[excelColName] = value ?? null;
+          });
+
+          // Apply transformations
+          const values = mapping.map((m, idx) => {
+            let value = rowData[m.excelColumn];
+            
+            // If transformation exists, apply it
+            if (transformations[idx]) {
+              value = evaluateExpression(transformations[idx], rowData);
+            }
+            
+            return value;
           });
 
           insertStmt.run(values);
@@ -443,6 +490,57 @@ ipcMain.handle('db:getImportLogs', async (event, options = {}) => {
   } catch (err) {
     console.error('Erreur db:getImportLogs', err);
     return { data: [], total: 0, limit: 20, offset: 0, error: true, message: err.message || 'Erreur inconnue' };
+  }
+});
+
+// ============ IPC TRANSFORMATIONS ============
+
+// Valider une expression de transformation
+ipcMain.handle('transform:validate', async (event, { expression, columns }) => {
+  try {
+    return validateExpression(expression, columns);
+  } catch (err) {
+    console.error('Erreur transform:validate', err);
+    return { valid: false, error: err.message };
+  }
+});
+
+// Preview transformation (sur quelques lignes)
+ipcMain.handle('transform:preview', async (event, { expression, sampleData }) => {
+  try {
+    const results = sampleData.map((row, index) => {
+      try {
+        const transformed = evaluateExpression(expression, row);
+        return {
+          index,
+          original: row,
+          transformed,
+          success: true
+        };
+      } catch (err) {
+        return {
+          index,
+          original: row,
+          transformed: null,
+          success: false,
+          error: err.message
+        };
+      }
+    });
+    return { success: true, results };
+  } catch (err) {
+    console.error('Erreur transform:preview', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// Obtenir la documentation des fonctions
+ipcMain.handle('transform:getDocs', async () => {
+  try {
+    return getFunctionDocs();
+  } catch (err) {
+    console.error('Erreur transform:getDocs', err);
+    return {};
   }
 });
 

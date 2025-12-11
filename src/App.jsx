@@ -26,6 +26,7 @@ function App() {
 
   // État mapping Excel → DB
   const [mapping, setMapping] = useState({});
+  const [transformations, setTransformations] = useState({});
   const [importResult, setImportResult] = useState("");
   const [settings, setSettings] = useState(() => {
     try {
@@ -190,6 +191,20 @@ function App() {
     }));
   };
 
+  const handleChangeTransformation = (dbColumn, expression) => {
+    setTransformations((prev) => {
+      if (!expression || expression.trim() === '') {
+        const newT = { ...prev };
+        delete newT[dbColumn];
+        return newT;
+      }
+      return {
+        ...prev,
+        [dbColumn]: expression,
+      };
+    });
+  };
+
   const handleImport = async () => {
     setImportResult("");
 
@@ -218,6 +233,7 @@ function App() {
         .map((col) => ({
           dbColumn: col.name,
           excelColumn: mapping[col.name],
+          transformation: transformations[col.name] || null,
         })) || [];
 
     if (mappingArray.length === 0) {
@@ -341,6 +357,8 @@ function App() {
                 onSelectTable={handleSelectTable}
                 settings={settings}
                 onChangeSettings={handleSettingsChange}
+                transformations={transformations}
+                onChangeTransformation={handleChangeTransformation}
               />
             </div>
           </div>

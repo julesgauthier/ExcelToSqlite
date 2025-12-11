@@ -34,6 +34,15 @@ const api = {
       return () => ipcRenderer.removeListener('import:progress', handler);
     },
   },
+
+  transform: {
+    validate: ({ expression, columns }) => 
+      ipcRenderer.invoke('transform:validate', { expression, columns }),
+    preview: ({ expression, sampleData }) => 
+      ipcRenderer.invoke('transform:preview', { expression, sampleData }),
+    getDocs: () => 
+      ipcRenderer.invoke('transform:getDocs'),
+  },
 };
 
 contextBridge.exposeInMainWorld("api", api);

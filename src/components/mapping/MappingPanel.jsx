@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import SectionCard from "../common/SectionCard.jsx";
 import { suggestCandidates } from '../../utils/fuzzyMatch';
+import TransformationEditor from './TransformationEditor.jsx';
 
 // simple deterministic color picker from a key
 const COLOR_PALETTE = ['#4caf50', '#ff7043', '#42a5f5', '#ab47bc', '#ffa726', '#26a69a', '#8d6e63', '#ef5350', '#29b6f6'];
@@ -24,6 +25,8 @@ export default function MappingPanel({
   onSelectTable,
   settings = { mode: 'stop' },
   onChangeSettings,
+  transformations = {},
+  onChangeTransformation,
 }) {
   const canShowMapping =
     selectedTable && excelInfo && excelInfo.columns && columns.length > 0;
@@ -40,6 +43,7 @@ export default function MappingPanel({
   // autoApply flag removed: auto-apply is now automatic when columns are available
   const [hovered, setHovered] = useState(null);
   const [legendPosition] = useState('bottom'); // 'top' | 'bottom'
+  const [transformationEditor, setTransformationEditor] = useState(null);
 
   useEffect(() => {
     if (!window || !window.api || !window.api.import || !window.api.import.onProgress) return;
@@ -386,13 +390,32 @@ export default function MappingPanel({
                     onMouseLeave={() => setHovered(null)}
                     style={{ padding: '8px', border: '1px dashed #ddd', borderRadius: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: mapping[col.name] ? '#f7fff7' : '#fff' }}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                       <div style={{ fontWeight: 600 }}>{col.name}</div>
                       <div style={{ fontSize: 12, color: '#666' }}>{mapping[col.name] || <em>(vide)</em>}</div>
+                      {transformations[col.name] && (
+                        <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 4 }}>
+                          ⚡ {transformations[col.name]}
+                        </div>
+                      )}
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       {mapping[col.name] && (
-                        <button className="btn btn-sm" onClick={() => onChangeMapping(col.name, '')}>✕</button>
+                        <>
+                          <button 
+                            className="btn btn-sm" 
+                            onClick={() => setTransformationEditor({
+                              dbColumn: col.name,
+                              excelColumn: mapping[col.name],
+                              expression: transformations[col.name] || ''
+                            })}
+                            title="Ajouter une transformation"
+                            style={{ background: transformations[col.name] ? '#3b82f6' : '#f1f5f9', color: transformations[col.name] ? 'white' : '#475569' }}
+                          >
+                            ⚡
+                          </button>
+                          <button className="btn btn-sm" onClick={() => onChangeMapping(col.name, '')}>✕</button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -489,6 +512,22 @@ export default function MappingPanel({
             </p>
           )}
         </>
+      )}
+
+      {/* Transformation Editor Modal */}
+      {transformationEditor && (
+        <TransformationEditor
+          dbColumn={transformationEditor.dbColumn}
+          excelColumn={transformationEditor.excelColumn}
+          excelColumns={excelInfo?.columns?.map(c => c.name) || []}
+          initialExpression={transformationEditor.expression}
+          sampleData={excelInfo?.preview || []}
+          onSave={(expression) => {
+            onChangeTransformation(transformationEditor.dbColumn, expression);
+            setTransformationEditor(null);
+          }}
+          onCancel={() => setTransformationEditor(null)}
+        />
       )}
     </SectionCard>
   );
