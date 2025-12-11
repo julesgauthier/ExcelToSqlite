@@ -2,11 +2,26 @@
 
 const path = require("path");
 const Database = require("better-sqlite3");
+const { app } = require("electron");
 
 // Emplacement du fichier SQLite.
 // Pour les tests on autorise l'override via la variable d'environnement TEST_SQLITE_DB_FILE
-// (utile pour CI). Sinon on utilise le fichier par défaut dans ce dossier.
-let dbFilePath = process.env.TEST_SQLITE_DB_FILE || path.join(__dirname, "excel2sqlite.db");
+// (utile pour CI). Sinon on utilise le dossier userData d'Electron (accessible en écriture même en production)
+function getDefaultDbPath() {
+  if (process.env.TEST_SQLITE_DB_FILE) {
+    return process.env.TEST_SQLITE_DB_FILE;
+  }
+  // Use userData directory in production (writable), fallback to __dirname in dev if app not ready
+  try {
+    const userDataPath = app.getPath("userData");
+    return path.join(userDataPath, "excel2sqlite.db");
+  } catch {
+    // Fallback for dev or before app is ready
+    return path.join(__dirname, "excel2sqlite.db");
+  }
+}
+
+let dbFilePath = getDefaultDbPath();
 
 let dbInstance = null;
 
@@ -32,7 +47,7 @@ function createDb() {
 function setDbFile(newPath) {
   // normalize: if falsy, reset to default path
   if (!newPath) {
-    dbFilePath = process.env.TEST_SQLITE_DB_FILE || path.join(__dirname, "excel2sqlite.db");
+    dbFilePath = getDefaultDbPath();
   } else {
     dbFilePath = String(newPath);
   }
