@@ -149,7 +149,6 @@ function App() {
       const result = await window.api.excel.previewSheet({
         filePath: excelInfo.filePath,
         sheetIndex: newIndex,
-        page: 0,
       });
 
       if (result && !result.error) {
@@ -160,8 +159,6 @@ function App() {
           columns: result.columns,
           sampleRows: result.sampleRows,
           totalRows: result.totalRows,
-          page: result.page || 0,
-          limit: result.limit,
         }));
       } else if (result && result.error) {
         setExcelError(result.message || "Erreur lors du changement de feuille.");
@@ -173,33 +170,6 @@ function App() {
   };
 
   // ---- HANDLERS MAPPING & IMPORT ----
-
-  const handlePreviewPage = async (newPage) => {
-    if (!excelInfo || !excelInfo.filePath) return;
-    if (!window.api || !window.api.excel || typeof window.api.excel.previewSheet !== 'function') return;
-
-    try {
-      const result = await window.api.excel.previewSheet({
-        filePath: excelInfo.filePath,
-        sheetIndex: excelInfo.activeSheetIndex ?? 0,
-        page: newPage,
-      });
-
-      if (result && !result.error) {
-        setExcelInfo((prev) => ({
-          ...prev,
-          sheetName: result.sheetName || prev.sheetName,
-          columns: result.columns,
-          sampleRows: result.sampleRows,
-          totalRows: result.totalRows,
-          page: result.page || 0,
-          limit: result.limit,
-        }));
-      }
-    } catch {
-      // ignore
-    }
-  };
 
   const handleChangeMapping = (dbColumn, excelColumnName) => {
     setMapping((prev) => ({
@@ -303,11 +273,6 @@ function App() {
 
   return (
     <AppLayout>
-      <p style={{ fontSize: "0.9rem", marginBottom: "1rem" }}>
-        <strong>API preload disponible :</strong>{" "}
-        {hasApi ? "✅ oui" : "❌ non"}
-      </p>
-
       <div className="panels">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minWidth: 320 }}>
           <ConnectionPanel onConnected={handleLoadTables} />
@@ -328,7 +293,6 @@ function App() {
           excelError={excelError}
           onOpenExcel={handleOpenExcel}
           onChangeSheet={handleChangeSheet}
-          onChangePage={handlePreviewPage}
         />
       </div>
 

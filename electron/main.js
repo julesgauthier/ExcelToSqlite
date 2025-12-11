@@ -51,8 +51,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// --- Utilitaire pour construire la preview d'une feuille Excel ---
-function buildSheetPreview(worksheet, maxRows = 5, page = 0) {
+// --- Utilitaire pour construire la preview d'une feuille Excel (max 5 lignes) ---
+function buildSheetPreview(worksheet) {
   const headerRow = worksheet.getRow(1);
   const columns = [];
 
@@ -71,15 +71,13 @@ function buildSheetPreview(worksheet, maxRows = 5, page = 0) {
   });
 
   const sampleRows = [];
+  const maxRows = 5;
 
-  // compute start/end rows for the page (skip header row at index 1)
-  const startRow = 2 + page * maxRows;
-  const endRow = startRow + maxRows - 1;
-
-  // Count total data rows (naive but sufficient)
+  // Count total data rows
   const totalRows = Math.max(worksheet.rowCount - 1, 0);
 
-  for (let rowNumber = startRow; rowNumber <= Math.min(endRow, worksheet.rowCount); rowNumber += 1) {
+  // Get first 5 data rows (skip header row at index 1)
+  for (let rowNumber = 2; rowNumber <= Math.min(1 + maxRows, worksheet.rowCount); rowNumber += 1) {
     const row = worksheet.getRow(rowNumber);
     const rowData = {};
 
@@ -97,7 +95,7 @@ function buildSheetPreview(worksheet, maxRows = 5, page = 0) {
     sampleRows.push(rowData);
   }
 
-  return { columns, sampleRows, totalRows, page, limit: maxRows };
+  return { columns, sampleRows, totalRows };
 }
 
 // ---- IPC TEST ----
@@ -126,8 +124,8 @@ ipcMain.handle('db:getLastRows', async (event, tableName, limit = 20) => {
   }
 });
 
-// ---- IPC EXCEL: OUVERTURE & PREVIEW (multi-feuilles, 5 lignes) ----
-ipcMain.handle('excel:open', async (event, payload = {}) => {
+// ---- IPC EXCEL: OUVERTURE & PREVIEW (multi-feuilles, 5 lignes max) ----
+ipcMain.handle('excel:open', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({
     title: 'Choisir un fichier Excel',
     filters: [{ name: 'Fichiers Excel', extensions: ['xlsx'] }],
@@ -160,9 +158,7 @@ ipcMain.handle('excel:open', async (event, payload = {}) => {
   const activeSheetIndex = 0;
   const worksheet = workbook.worksheets[activeSheetIndex];
 
-  const previewLimit = payload.limit || 5;
-  const page = payload.page || 0;
-  const { columns, sampleRows, totalRows } = buildSheetPreview(worksheet, previewLimit, page);
+  const { columns, sampleRows, totalRows } = buildSheetPreview(worksheet);
 
   return {
     canceled: false,
@@ -173,13 +169,11 @@ ipcMain.handle('excel:open', async (event, payload = {}) => {
     columns,
     sampleRows,
     totalRows,
-    page,
-    limit: previewLimit,
   };
 });
 
-// Preview d'une autre feuille du même fichier
-ipcMain.handle('excel:previewSheet', async (event, { filePath, sheetIndex, limit = 5, page = 0 }) => {
+// Preview d'une autre feuille du même fichier (max 5 lignes)
+ipcMain.handle('excel:previewSheet', async (event, { filePath, sheetIndex }) => {
   if (!filePath || typeof sheetIndex !== 'number') {
     return {
       error: 'BAD_PARAMS',
@@ -199,7 +193,7 @@ ipcMain.handle('excel:previewSheet', async (event, { filePath, sheetIndex, limit
     };
   }
 
-  const { columns, sampleRows, totalRows } = buildSheetPreview(worksheet, limit, page);
+  const { columns, sampleRows, totalRows } = buildSheetPreview(worksheet);
 
   return {
     sheetIndex,
@@ -207,8 +201,6 @@ ipcMain.handle('excel:previewSheet', async (event, { filePath, sheetIndex, limit
     columns,
     sampleRows,
     totalRows,
-    page,
-    limit,
   };
 });
 

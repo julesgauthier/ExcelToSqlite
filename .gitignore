@@ -26,3 +26,4 @@ dist-ssr
 # database files
 *.sqlite
 *.db*
+/dist_electron
