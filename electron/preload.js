@@ -13,7 +13,7 @@ const api = {
       ipcRenderer.invoke("db:getColumns", tableName),
     getLastRows: (tableName, limit) =>
       ipcRenderer.invoke("db:getLastRows", tableName, limit),
-    getImportLogs: (limit) => ipcRenderer.invoke("db:getImportLogs", limit),
+    getImportLogs: (options) => ipcRenderer.invoke("db:getImportLogs", options),
     chooseFile: () => ipcRenderer.invoke('db:chooseSqliteFile'),
     setDbFile: (filePath) => ipcRenderer.invoke('db:setDbFile', filePath),
     getDbFile: () => ipcRenderer.invoke('db:getDbFile'),
@@ -33,6 +33,15 @@ const api = {
       ipcRenderer.on('import:progress', handler);
       return () => ipcRenderer.removeListener('import:progress', handler);
     },
+  },
+
+  transform: {
+    validate: ({ expression, columns }) => 
+      ipcRenderer.invoke('transform:validate', { expression, columns }),
+    preview: ({ expression, sampleData }) => 
+      ipcRenderer.invoke('transform:preview', { expression, sampleData }),
+    getDocs: () => 
+      ipcRenderer.invoke('transform:getDocs'),
   },
 };
 

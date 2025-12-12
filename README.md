@@ -234,35 +234,81 @@ npm run build
 
 ### Tests
 
+Suite complète de 90 tests unitaires et d'intégration avec Jest.
+
 ```bash
+# Lancer tous les tests
 npm run test
+
+# Mode watch (développement)
+npm run test:watch
+
+# Rapport de couverture
+npm run test:coverage
+
+# Tests unitaires uniquement
+npm run test:unit
+
+# Tests d'intégration uniquement
+npm run test:integration
 ```
+
+**Couverture actuelle :**
+
+* ✅ **90 tests** (100% de réussite)
+* ✅ **96.68% de couverture** pour transformEngine.js
+* ✅ **77.17% de couverture** pour initDb.js
+* ✅ **94.82% des fonctions** testées
+
+Documentation complète : [tests README](__tests__/README.md)
 
 ---
 
-## 10. Roadmap – Évolutions futures
+## 10. Fonctionnalités actuelles
 
-### V2
+### ✅ V1 - Core Features (Implémenté)
 
-* Suggestion automatique de mapping
-* Détection type (int, float, date)
-* Nettoyage automatique (trim, majuscule, format dates)
-* Import multi-feuilles
+* ✅ Import Excel (.xlsx)
+* ✅ Mapping colonnes Excel → SQLite
+* ✅ Prévisualisation des données
+* ✅ Transaction sécurisée avec gestion d'erreurs
+* ✅ Logs d'import avec pagination et recherche
+* ✅ **Suite de tests complète (90 tests, 89% de couverture)**
+
+### ✅ V2 - Transformations (Implémenté)
+
+* ✅ **Moteur de transformations avancé**
+  * 30+ fonctions intégrées (dates, texte, math, conditions)
+  * Support format français (DD/MM/YYYY, espaces milliers, virgule décimale)
+  * Interface graphique avec prévisualisation en temps réel
+  * Validation syntaxique avec aide contextuelle
+  * Documentation intégrée par catégorie
+* ✅ Exemples : `AGE({dateNaissance})`, `ROUND({prix} * 1.20, 2)`, `UPPER({nom})`
+* ✅ Tests complets (67 tests unitaires + 8 tests d'intégration)
+
+Documentation détaillée : [TRANSFORMATIONS.md](TRANSFORMATIONS.md)
+
+---
+
+## 11. Roadmap – Évolutions futures
 
 ### V3
 
-* Édition des données mappées avant import
-* Transformation personnalisée par colonne
-* Historique des imports
+* Suggestion automatique de mapping (ML-based)
+* Détection automatique du type de colonne
+* Import multi-feuilles Excel
+* Templates de mapping sauvegardés
 
-### V4
+### V4 - Edition & Rollback
+
+* Édition des données mappées avant import (table virtuelle)
+* Historique des imports avec rollback
+* Mode "dry-run" (simulation d'import)
+
+### V5 - Multi-bases
 
 * Connecteurs pour PostgreSQL / MySQL
 * Export DB → Excel automatisé
 * Mode CLI
-
-### V5
-
 * Import Excel → multiples tables (relationnel)
-* Templates de mapping sauvegardés
 * Dashboard qualité (anomalies, stats)

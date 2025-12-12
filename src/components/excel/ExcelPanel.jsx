@@ -5,7 +5,6 @@ export default function ExcelPanel({
   excelError,
   onOpenExcel,
   onChangeSheet,
-  onChangePage,
 }) {
   return (
     <SectionCard title="Fichier Excel">
@@ -61,68 +60,50 @@ export default function ExcelPanel({
           )}
 
           <h3 style={{ marginTop: "1rem" }}>
-            Exemple de lignes (page {((excelInfo.page ?? 0) + 1)}
-            {excelInfo.totalRows ? ` — ${excelInfo.totalRows} lignes au total` : ''})
+            Exemple de lignes (max 5)
+            {excelInfo.totalRows ? ` — ${excelInfo.totalRows} lignes au total` : ''}
           </h3>
           {excelInfo.sampleRows.length === 0 && (
             <p>Aucune ligne de données trouvée.</p>
           )}
           {excelInfo.sampleRows.length > 0 && (
-            <div className="table-scroll" style={{ marginTop: "0.5rem" }}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    {excelInfo.columns.map((col) => (
-                      <th key={col.index} style={{ whiteSpace: "nowrap" }}>
-                        {col.name}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {excelInfo.sampleRows.map((row, idx) => (
-                    <tr key={idx}>
+            <>
+              {excelInfo.sampleRows.length > 5 && (
+                <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>
+                  Affichage des 5 premières lignes sur {excelInfo.sampleRows.length} disponibles
+                </div>
+              )}
+              <div className="table-scroll" style={{ marginTop: "0.5rem" }}>
+                <table className="table">
+                  <thead>
+                    <tr>
                       {excelInfo.columns.map((col) => (
-                        <td
-                          key={col.index}
-                          style={{ whiteSpace: "nowrap" }}
-                        >
-                          {row[col.name] != null
-                            ? String(row[col.name])
-                            : ""}
-                        </td>
+                        <th key={col.index} style={{ whiteSpace: "nowrap" }}>
+                          {col.name}
+                        </th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-            {/* Pagination controls */}
-            {typeof excelInfo.totalRows === 'number' && (
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => onChangePage && onChangePage(Math.max(0, (excelInfo.page || 0) - 1))}
-                  disabled={(excelInfo.page || 0) <= 0}
-                >
-                  Précédent
-                </button>
-
-                <div style={{ fontSize: '0.9rem' }}>
-                  Page { (excelInfo.page || 0) + 1 } / { Math.max(1, Math.ceil((excelInfo.totalRows || 0) / (excelInfo.limit || 5))) }
-                </div>
-
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => onChangePage && onChangePage((excelInfo.page || 0) + 1)}
-                  disabled={(excelInfo.page || 0) >= Math.max(0, Math.ceil((excelInfo.totalRows || 0) / (excelInfo.limit || 5)) - 1)}
-                >
-                  Suivant
-                </button>
+                  </thead>
+                  <tbody>
+                    {excelInfo.sampleRows.slice(0, 5).map((row, idx) => (
+                      <tr key={idx}>
+                        {excelInfo.columns.map((col) => (
+                          <td
+                            key={col.index}
+                            style={{ whiteSpace: "nowrap" }}
+                          >
+                            {row[col.name] != null
+                              ? String(row[col.name])
+                              : ""}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            )}
+            </>
+          )}
         </div>
       )}
     </SectionCard>

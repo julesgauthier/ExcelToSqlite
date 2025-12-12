@@ -5,6 +5,7 @@ const path = require('path');
 const ExcelJS = require('exceljs');
 const { getDb, getTables, getColumns, getLastRows, addImportLogWithErrors, getImportLogs } = require('./db/initDb');
 const { setDbFile, getDbFile } = require('./db/initDb');
+const { evaluateExpression, validateExpression, getFunctionDocs } = require('./utils/transformEngine');
 
 const isDev = !app.isPackaged;
 
@@ -28,7 +29,8 @@ function createWindow() {
     mainWindow.loadURL('http://localhost:5173');
     // mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    // In production, dist is at the app root, not relative to electron/
+    mainWindow.loadFile(path.join(app.getAppPath(), 'dist', 'index.html'));
   }
 
   mainWindow.on('closed', () => {
@@ -51,8 +53,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// --- Utilitaire pour construire la preview d'une feuille Excel ---
-function buildSheetPreview(worksheet, maxRows = 5, page = 0) {
+// --- Utilitaire pour construire la preview d'une feuille Excel (max 5 lignes) ---
+function buildSheetPreview(worksheet) {
   const headerRow = worksheet.getRow(1);
   const columns = [];
 
@@ -71,15 +73,13 @@ function buildSheetPreview(worksheet, maxRows = 5, page = 0) {
   });
 
   const sampleRows = [];
+  const maxRows = 5;
 
-  // compute start/end rows for the page (skip header row at index 1)
-  const startRow = 2 + page * maxRows;
-  const endRow = startRow + maxRows - 1;
-
-  // Count total data rows (naive but sufficient)
+  // Count total data rows
   const totalRows = Math.max(worksheet.rowCount - 1, 0);
 
-  for (let rowNumber = startRow; rowNumber <= Math.min(endRow, worksheet.rowCount); rowNumber += 1) {
+  // Get first 5 data rows (skip header row at index 1)
+  for (let rowNumber = 2; rowNumber <= Math.min(1 + maxRows, worksheet.rowCount); rowNumber += 1) {
     const row = worksheet.getRow(rowNumber);
     const rowData = {};
 
@@ -97,7 +97,7 @@ function buildSheetPreview(worksheet, maxRows = 5, page = 0) {
     sampleRows.push(rowData);
   }
 
-  return { columns, sampleRows, totalRows, page, limit: maxRows };
+  return { columns, sampleRows, totalRows };
 }
 
 // ---- IPC TEST ----
@@ -126,8 +126,8 @@ ipcMain.handle('db:getLastRows', async (event, tableName, limit = 20) => {
   }
 });
 
-// ---- IPC EXCEL: OUVERTURE & PREVIEW (multi-feuilles, 5 lignes) ----
-ipcMain.handle('excel:open', async (event, payload = {}) => {
+// ---- IPC EXCEL: OUVERTURE & PREVIEW (multi-feuilles, 5 lignes max) ----
+ipcMain.handle('excel:open', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({
     title: 'Choisir un fichier Excel',
     filters: [{ name: 'Fichiers Excel', extensions: ['xlsx'] }],
@@ -160,9 +160,7 @@ ipcMain.handle('excel:open', async (event, payload = {}) => {
   const activeSheetIndex = 0;
   const worksheet = workbook.worksheets[activeSheetIndex];
 
-  const previewLimit = payload.limit || 5;
-  const page = payload.page || 0;
-  const { columns, sampleRows, totalRows } = buildSheetPreview(worksheet, previewLimit, page);
+  const { columns, sampleRows, totalRows } = buildSheetPreview(worksheet);
 
   return {
     canceled: false,
@@ -173,13 +171,11 @@ ipcMain.handle('excel:open', async (event, payload = {}) => {
     columns,
     sampleRows,
     totalRows,
-    page,
-    limit: previewLimit,
   };
 });
 
-// Preview d'une autre feuille du même fichier
-ipcMain.handle('excel:previewSheet', async (event, { filePath, sheetIndex, limit = 5, page = 0 }) => {
+// Preview d'une autre feuille du même fichier (max 5 lignes)
+ipcMain.handle('excel:previewSheet', async (event, { filePath, sheetIndex }) => {
   if (!filePath || typeof sheetIndex !== 'number') {
     return {
       error: 'BAD_PARAMS',
@@ -199,7 +195,7 @@ ipcMain.handle('excel:previewSheet', async (event, { filePath, sheetIndex, limit
     };
   }
 
-  const { columns, sampleRows, totalRows } = buildSheetPreview(worksheet, limit, page);
+  const { columns, sampleRows, totalRows } = buildSheetPreview(worksheet);
 
   return {
     sheetIndex,
@@ -207,8 +203,6 @@ ipcMain.handle('excel:previewSheet', async (event, { filePath, sheetIndex, limit
     columns,
     sampleRows,
     totalRows,
-    page,
-    limit,
   };
 });
 
@@ -234,6 +228,7 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
 
     const dbColumns = mapping.map((m) => m.dbColumn);
     const excelColumns = mapping.map((m) => m.excelColumn);
+    const transformations = mapping.map((m) => m.transformation || null);
 
     const placeholders = dbColumns.map(() => '?').join(', ');
     const sql = `INSERT INTO ${tableName} (${dbColumns.join(', ')}) VALUES (${placeholders})`;
@@ -275,9 +270,13 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
       for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber += 1) {
         const row = worksheet.getRow(rowNumber);
 
-        const values = excelColumns.map((excelColName) => {
+        const rowData = {};
+        excelColumns.forEach((excelColName) => {
           const colIndex = excelHeaderMap.get(excelColName);
-          if (!colIndex) return null;
+          if (!colIndex) {
+            rowData[excelColName] = null;
+            return;
+          }
 
           const cell = row.getCell(colIndex);
           let value = cell.value;
@@ -286,8 +285,33 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
             value = value.text;
           }
 
-          return value ?? null;
+          rowData[excelColName] = value ?? null;
         });
+
+        // Apply transformations
+        const values = mapping.map((m, idx) => {
+          let value = rowData[m.excelColumn];
+          
+          // If transformation exists, apply it
+          if (transformations[idx]) {
+            try {
+              value = evaluateExpression(transformations[idx], rowData);
+            } catch (transformErr) {
+              // If transformation fails, log error and use null or original value
+              errors.push({ 
+                row: rowNumber, 
+                error: `Transformation error for ${m.dbColumn}: ${transformErr.message}` 
+              });
+              failedCount += 1;
+              return null; // Skip this row
+            }
+          }
+          
+          return value;
+        });
+
+        // Skip if transformation failed
+        if (values.includes(null) && values.every(v => v === null)) continue;
 
         // Check for cancellation request
         const token = importTokens.get(importId);
@@ -341,9 +365,13 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
         worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
           if (rowNumber === 1) return;
 
-          const values = excelColumns.map((excelColName) => {
+          const rowData = {};
+          excelColumns.forEach((excelColName) => {
             const colIndex = excelHeaderMap.get(excelColName);
-            if (!colIndex) return null;
+            if (!colIndex) {
+              rowData[excelColName] = null;
+              return;
+            }
 
             const cell = row.getCell(colIndex);
             let value = cell.value;
@@ -352,7 +380,19 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
               value = value.text;
             }
 
-            return value ?? null;
+            rowData[excelColName] = value ?? null;
+          });
+
+          // Apply transformations
+          const values = mapping.map((m, idx) => {
+            let value = rowData[m.excelColumn];
+            
+            // If transformation exists, apply it
+            if (transformations[idx]) {
+              value = evaluateExpression(transformations[idx], rowData);
+            }
+            
+            return value;
           });
 
           insertStmt.run(values);
@@ -444,12 +484,63 @@ ipcMain.handle('db:importExcelToTable', async (event, payload) => {
 });
 
 // IPC pour récupérer l'historique des imports
-ipcMain.handle('db:getImportLogs', async (event, limit = 50) => {
+ipcMain.handle('db:getImportLogs', async (event, options = {}) => {
   try {
-    return getImportLogs(limit);
+    return getImportLogs(options);
   } catch (err) {
     console.error('Erreur db:getImportLogs', err);
-    return { error: true, message: err.message || 'Erreur inconnue' };
+    return { data: [], total: 0, limit: 20, offset: 0, error: true, message: err.message || 'Erreur inconnue' };
+  }
+});
+
+// ============ IPC TRANSFORMATIONS ============
+
+// Valider une expression de transformation
+ipcMain.handle('transform:validate', async (event, { expression, columns }) => {
+  try {
+    return validateExpression(expression, columns);
+  } catch (err) {
+    console.error('Erreur transform:validate', err);
+    return { valid: false, error: err.message };
+  }
+});
+
+// Preview transformation (sur quelques lignes)
+ipcMain.handle('transform:preview', async (event, { expression, sampleData }) => {
+  try {
+    const results = sampleData.map((row, index) => {
+      try {
+        const transformed = evaluateExpression(expression, row);
+        return {
+          index,
+          original: row,
+          transformed,
+          success: true
+        };
+      } catch (err) {
+        return {
+          index,
+          original: row,
+          transformed: null,
+          success: false,
+          error: err.message
+        };
+      }
+    });
+    return { success: true, results };
+  } catch (err) {
+    console.error('Erreur transform:preview', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// Obtenir la documentation des fonctions
+ipcMain.handle('transform:getDocs', async () => {
+  try {
+    return getFunctionDocs();
+  } catch (err) {
+    console.error('Erreur transform:getDocs', err);
+    return {};
   }
 });
 
