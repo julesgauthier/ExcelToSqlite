@@ -111,10 +111,10 @@ export default function ImportHistoryPanel() {
               ✕
             </button>
           )}
+          <button className="btn btn-secondary" onClick={() => fetchLogs()}>
+            🔄 Rafraîchir
+          </button>
         </div>
-        <button className="btn btn-secondary" onClick={() => fetchLogs()}>
-          🔄 Rafraîchir
-        </button>
       </div>
 
       {/* Stats */}

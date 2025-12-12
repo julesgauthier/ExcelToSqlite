@@ -9,10 +9,17 @@
   height: 100%;
   overflow-y: auto;
   background: #ffffff;
+  padding-left: 2rem;
+  padding-right: 2rem;
 }
 
 @media (max-width: 768px) {
   .app-layout-with-sidebar {
     margin-left: 0;
+  }
+  
+  .app-content {
+    padding-left: 1rem;
+    padding-right: 1rem;
   }
 }
