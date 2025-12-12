@@ -410,7 +410,14 @@ function validateExpression(expression, availableColumns) {
     // Test avec des données fictives
     const testData = {};
     availableColumns.forEach(col => {
-      testData[col] = '2000-01-01'; // Date par défaut pour test
+      // Utiliser des données réalistes selon les noms de colonnes courants
+      if (col.toLowerCase().includes('date') || col.toLowerCase().includes('naissance')) {
+        testData[col] = '01/01/2000';
+      } else if (col.toLowerCase().includes('age') || col.toLowerCase().includes('quantite') || col.toLowerCase().includes('prix')) {
+        testData[col] = 20;
+      } else {
+        testData[col] = 'test';
+      }
     });
     
     evaluateExpression(expression, testData);

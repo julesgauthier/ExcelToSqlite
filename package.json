@@ -10,8 +10,11 @@
     "electron": "electron .",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "jest --passWithNoTests",
-    "test:unit": "jest --passWithNoTests",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:unit": "jest --testPathPattern=__tests__/(transformEngine|initDb).test.js",
+    "test:integration": "jest --testPathPattern=__tests__/integration.test.js",
     "dist": "npm run build:renderer && electron-builder",
     "dist:win": "npm run build:renderer && electron-builder --win",
     "dist:mac": "npm run build:renderer && electron-builder --mac",
@@ -44,7 +47,23 @@
   },
   "jest": {
     "testEnvironment": "node",
-    "verbose": true
+    "verbose": true,
+    "testMatch": [
+      "**/__tests__/**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "electron/**/*.js",
+      "!electron/main.js",
+      "!electron/preload.js",
+      "!**/node_modules/**"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ],
+    "testTimeout": 10000
   },
   "build": {
     "appId": "com.excel2sqlite.app",
