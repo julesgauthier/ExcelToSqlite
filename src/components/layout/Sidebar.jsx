@@ -21,7 +21,7 @@ export default function Sidebar({ tabs, activeTab, onTabChange }) {
       </nav>
 
       <div className="sidebar-footer">
-        <div className="sidebar-version">v1.0.0</div>
+        <div className="sidebar-version">v1.1.0</div>
       </div>
     </aside>
   );
